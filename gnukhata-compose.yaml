@@ -1,125 +1,63 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: gnukhata-db
-    restart: unless-stopped
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 64M
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gkadmin} -d ${POSTGRES_DB:-gkdata}"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+    container_name: postgres
+    restart: "always"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - postgres-network
+    expose:
+      - "5432"
     volumes:
       - gkdb:/var/lib/postgresql/data
-    networks:
-      - gnukhata-internal
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}'"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   gkcore:
     image: ${GKCORE_IMAGE:-digitalfreedom/gkcore:latest}
-    container_name: gnukhata-core
-    restart: unless-stopped
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-        reservations:
-          memory: 128M
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6543/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    container_name: gkcore
+    restart: "always"
     environment:
       - GKCORE_DB_HOST=db
       - GKCORE_DB_PORT=5432
-      - GKCORE_DB_USER=${POSTGRES_USER}
-      - GKCORE_DB_PASSWORD=${POSTGRES_PASSWORD}
-      - GKCORE_DB_NAME=${POSTGRES_DB}
-      - GKSECRET=${GKSECRET}
-      - GKCORE_URL=http://${GKCORE_URL}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ENVIRONMENT=production
     networks:
-      - traefik-public
-      - gnukhata-internal
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.gnukhata-core.entrypoints=websecure"
-      - "traefik.http.routers.gnukhata-core.rule=Host(`${GKCORE_URL}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.gnukhata-core.tls=true"
-      - "traefik.http.routers.gnukhata-core.tls.certresolver=${GKCERTRESOLVER}"
-      - "traefik.http.services.gnukhata-core.loadbalancer.server.port=6543"
-      - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.interval=30s"
-      - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.timeout=10s"
-      - "traefik.docker.network=traefik-public"
+      - postgres-network
+      - gk-network
+    depends_on:
+      db:
+        condition: service_healthy
 
   gkapp:
     image: ${GKAPP_IMAGE:-digitalfreedom/gkapp:latest}
-    container_name: gnukhata-web
-    restart: unless-stopped
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    profiles:
-      - frontend
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 64M
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:80 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    restart: "always"
     environment:
-      - VITE_GKCORE_URL=http://${GKCORE_URL}
+      - VITE_GKCORE_URL=https://${GK_URL}/api
     networks:
       - traefik-public
+      - gk-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.gnukhata-web.entrypoints=websecure"
-      - "traefik.http.routers.gnukhata-web.rule=Host(`${GKCORE_URL}`)"
-      - "traefik.http.routers.gnukhata-web.tls=true"
-      - "traefik.http.routers.gnukhata-web.tls.certresolver=${GKCERTRESOLVER}"
-      - "traefik.http.services.gnukhata-web.loadbalancer.server.port=80"
-      - "traefik.http.services.gnukhata-web.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.gnukhata-web.loadbalancer.healthcheck.interval=30s"
-      - "traefik.http.services.gnukhata-web.loadbalancer.healthcheck.timeout=10s"
       - "traefik.docker.network=traefik-public"
-
-volumes:
-  gkdb:
+      - "traefik.http.routers.gkapp.rule=Host(`${GK_URL:?GK_URL environment variable is not set}`)"
+      - "traefik.http.routers.gkapp.entrypoints=websecure"
+      - "traefik.http.routers.gkapp.tls.certresolver=${TRAEFIK_CERT_RESOLVER:?TRAEFIK_CERT_RESOLVER environment variable is not set}"
 
 networks:
   traefik-public:
-    name: traefik-public
     external: true
-  gnukhata-internal:
-    name: gnukhata-internal
+  gk-network:
     external: false
+    driver: bridge
+  postgres-network:
+    external: false
+    driver: bridge
+
+volumes:
+  gkdb:
