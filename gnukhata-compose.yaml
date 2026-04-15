@@ -15,15 +15,15 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${GKCORE_DB_USER:-gkadmin} -d ${GKCORE_DB_NAME:-gkdata}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gkadmin} -d ${POSTGRES_DB:-gkdata}"]
       interval: 10s
       timeout: 3s
       retries: 3
       start_period: 10s
     environment:
-      - POSTGRES_USER=${GKCORE_DB_USER:-gkadmin}
-      - POSTGRES_PASSWORD=${GKCORE_DB_PASSWORD}
-      - POSTGRES_DB=${GKCORE_DB_NAME}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - gkdb:/var/lib/postgresql/data
     networks:
@@ -37,10 +37,6 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
     deploy:
       resources:
         limits:
@@ -49,7 +45,7 @@ services:
         reservations:
           memory: 128M
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6543/ping || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:6543/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -57,11 +53,11 @@ services:
     environment:
       - GKCORE_DB_HOST=db
       - GKCORE_DB_PORT=5432
-      - GKCORE_DB_NAME=${GKCORE_DB_NAME:-gkdata}
-      - GKCORE_DB_USER=${GKCORE_DB_USER:-gkadmin}
-      - GKCORE_DB_PASSWORD=${GKCORE_DB_PASSWORD:-gkadmin}
+      - GKCORE_DB_USER=${POSTGRES_USER}
+      - GKCORE_DB_PASSWORD=${POSTGRES_PASSWORD}
+      - GKCORE_DB_NAME=${POSTGRES_DB}
       - GKSECRET=${GKSECRET}
-      - GKCORE_URL=https://${GKCORE_URL}
+      - GKCORE_URL=http://${GKCORE_URL}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     networks:
       - traefik-public
@@ -71,9 +67,9 @@ services:
       - "traefik.http.routers.gnukhata-core.entrypoints=websecure"
       - "traefik.http.routers.gnukhata-core.rule=Host(`${GKCORE_URL}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.gnukhata-core.tls=true"
-      - "traefik.http.routers.gnukhata-core.tls.certresolver=cloudflare"
+      - "traefik.http.routers.gnukhata-core.tls.certresolver=${GKCERTRESOLVER}"
       - "traefik.http.services.gnukhata-core.loadbalancer.server.port=6543"
-      - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.path=/ping"
+      - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.gnukhata-core.loadbalancer.healthcheck.timeout=10s"
       - "traefik.docker.network=traefik-public"
@@ -86,10 +82,6 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
     profiles:
       - frontend
     deploy:
@@ -106,7 +98,7 @@ services:
       retries: 3
       start_period: 30s
     environment:
-      - VITE_GKCORE_URL=https://${GKCORE_URL}
+      - VITE_GKCORE_URL=http://${GKCORE_URL}
     networks:
       - traefik-public
     labels:
@@ -114,7 +106,7 @@ services:
       - "traefik.http.routers.gnukhata-web.entrypoints=websecure"
       - "traefik.http.routers.gnukhata-web.rule=Host(`${GKCORE_URL}`)"
       - "traefik.http.routers.gnukhata-web.tls=true"
-      - "traefik.http.routers.gnukhata-web.tls.certresolver=cloudflare"
+      - "traefik.http.routers.gnukhata-web.tls.certresolver=${GKCERTRESOLVER}"
       - "traefik.http.services.gnukhata-web.loadbalancer.server.port=80"
       - "traefik.http.services.gnukhata-web.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.gnukhata-web.loadbalancer.healthcheck.interval=30s"
