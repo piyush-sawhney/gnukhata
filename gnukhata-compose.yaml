@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: postgres
+    container_name: postgres_gk
     restart: "always"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -9,8 +9,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     networks:
       - postgres-network
-    expose:
-      - "5432"
     volumes:
       - gkdb:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +19,7 @@ services:
 
   gkcore:
     image: ${GKCORE_IMAGE:-digitalfreedom/gkcore:latest}
-    container_name: gkcore
+    container_name: gk_core
     restart: "always"
     environment:
       - GKCORE_DB_HOST=db
@@ -29,34 +27,40 @@ services:
       - ENVIRONMENT=production
     networks:
       - postgres-network
-      - gk-network
+      - traefik-public  
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.gkcore.rule=Host(`${GK_URL}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.gkcore.entrypoints=websecure"
+      - "traefik.http.routers.gkcore.tls.certresolver=${TRAEFIK_CERT_RESOLVER}"
+      - "traefik.http.middlewares.gk-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.gkcore.middlewares=gk-strip"
+      - "traefik.http.services.gkcore.loadbalancer.server.port=6543"
 
   gkapp:
     image: ${GKAPP_IMAGE:-digitalfreedom/gkapp:latest}
+    container_name: gk_app
     restart: "always"
     environment:
       - VITE_GKCORE_URL=https://${GK_URL}/api
     networks:
       - traefik-public
-      - gk-network
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
-      - "traefik.http.routers.gkapp.rule=Host(`${GK_URL:?GK_URL environment variable is not set}`)"
+      - "traefik.http.routers.gkapp.rule=Host(`${GK_URL}`)"
       - "traefik.http.routers.gkapp.entrypoints=websecure"
-      - "traefik.http.routers.gkapp.tls.certresolver=${TRAEFIK_CERT_RESOLVER:?TRAEFIK_CERT_RESOLVER environment variable is not set}"
+      - "traefik.http.routers.gkapp.tls.certresolver=${TRAEFIK_CERT_RESOLVER}"
+      - "traefik.http.services.gkapp.loadbalancer.server.port=80"
 
 networks:
   traefik-public:
     external: true
-  gk-network:
-    external: false
-    driver: bridge
   postgres-network:
-    external: false
     driver: bridge
 
 volumes:
