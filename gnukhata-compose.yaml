@@ -136,4 +136,4 @@ networks:
     external: true
   gnukhata-internal:
     name: gnukhata-internal
-    externatl: false
+    external: false
