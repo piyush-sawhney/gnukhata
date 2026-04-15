@@ -25,6 +25,9 @@ services:
       - GKCORE_DB_HOST=db
       - GKCORE_DB_PORT=5432
       - ENVIRONMENT=production
+      - GKCORE_DB_USER=${POSTGRES_USER}      # Added
+      - GKCORE_DB_PASSWORD=${POSTGRES_PASSWORD} # Added
+      - GKCORE_DB_NAME=${POSTGRES_DB}
     networks:
       - postgres-network
       - traefik-public  
